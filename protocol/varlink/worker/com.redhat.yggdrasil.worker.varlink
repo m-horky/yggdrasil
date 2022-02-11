@@ -1,0 +1,8 @@
+# Interface to interact with yggdrasil workers.
+interface com.redhat.yggdrasil.worker
+
+# Dispatch sends data to the worker along with the provided metadata.
+method Dispatch(id: string, metadata: [string]string, data: object) -> (accepted: bool)
+
+# The dispatched data was rejected by the worker.
+error DispatchRejected (reason: string)

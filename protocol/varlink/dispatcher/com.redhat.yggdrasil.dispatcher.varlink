@@ -1,0 +1,8 @@
+# Interface to interact with yggd, the dispatcher service.
+interface com.redhat.yggdrasil.dispatcher
+
+# Relay sends data to the specified destination.
+method Relay(destination: string, id: string, metadata: [string]string, data: object) -> (code: ?int, metadata: ?[string]string, data: ?object)
+
+# The destination could not be handled by the dispatch service.
+error InvalidDestination ()
