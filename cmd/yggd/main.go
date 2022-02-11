@@ -19,7 +19,7 @@ import (
 
 	"git.sr.ht/~spc/go-log"
 	"github.com/redhatinsights/yggdrasil"
-	pb "github.com/redhatinsights/yggdrasil/protocol"
+	pb "github.com/redhatinsights/yggdrasil/protocol/grpc"
 	"github.com/rjeczalik/notify"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"

@@ -11,7 +11,7 @@ import (
 
 	"git.sr.ht/~spc/go-log"
 	"github.com/redhatinsights/yggdrasil"
-	pb "github.com/redhatinsights/yggdrasil/protocol"
+	pb "github.com/redhatinsights/yggdrasil/protocol/grpc"
 	"google.golang.org/grpc"
 )
 
