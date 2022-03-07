@@ -3,6 +3,7 @@ package transport
 import (
 	"crypto/tls"
 	"fmt"
+	"io/ioutil"
 	"path/filepath"
 	"sync/atomic"
 	"time"
@@ -43,12 +44,18 @@ func (t *HTTP) Connect() error {
 			if t.disconnected.Load().(bool) {
 				return
 			}
-			payload, err := t.client.Get(t.getUrl("in", "control"))
+			resp, err := t.client.Get(t.getUrl("in", "control"))
 			if err != nil {
 				log.Tracef("cannot get HTTP request: %v", err)
 			}
-			if len(payload) > 0 {
-				_ = t.ReceiveData(payload, "control")
+			if resp != nil {
+				data, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					log.Errorf("cannot read response body: %v", err)
+					continue
+				}
+				_ = t.ReceiveData(data, "control")
+				resp.Body.Close()
 			}
 			time.Sleep(t.pollingInterval)
 		}
@@ -59,12 +66,18 @@ func (t *HTTP) Connect() error {
 			if t.disconnected.Load().(bool) {
 				return
 			}
-			payload, err := t.client.Get(t.getUrl("in", "data"))
+			resp, err := t.client.Get(t.getUrl("in", "data"))
 			if err != nil {
 				log.Tracef("cannot get HTTP request: %v", err)
 			}
-			if len(payload) > 0 {
-				_ = t.ReceiveData(payload, "data")
+			if resp != nil {
+				data, err := ioutil.ReadAll(resp.Body)
+				if err != nil {
+					log.Errorf("cannot read response body: %v", err)
+					continue
+				}
+				_ = t.ReceiveData(data, "data")
+				resp.Body.Close()
 			}
 			time.Sleep(t.pollingInterval)
 		}
@@ -96,7 +109,12 @@ func (t *HTTP) send(message []byte, channel string) error {
 		"Content-Type": "application/json",
 	}
 	log.Tracef("posting HTTP request body: %s", string(message))
-	return t.client.Post(url, headers, message)
+	_, err := t.client.Post(url, headers, message)
+	if err != nil {
+		return fmt.Errorf("cannot send data: %w", err)
+	}
+
+	return nil
 }
 
 func (t *HTTP) getUrl(direction string, channel string) string {
