@@ -11,11 +11,11 @@ import (
 	"git.sr.ht/~spc/go-log"
 	"github.com/google/uuid"
 	"github.com/redhatinsights/yggdrasil"
-	"github.com/redhatinsights/yggdrasil/internal/transport"
+	"github.com/redhatinsights/yggdrasil/internal/net"
 )
 
 type Client struct {
-	t transport.Transporter
+	t net.Transporter
 	d *dispatcher
 }
 

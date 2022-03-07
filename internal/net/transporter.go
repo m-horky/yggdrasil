@@ -1,4 +1,4 @@
-package transport
+package net
 
 type DataReceiveHandlerFunc func([]byte, string)
 

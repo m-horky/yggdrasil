@@ -15,7 +15,7 @@ import (
 
 	"github.com/redhatinsights/yggdrasil/internal"
 	"github.com/redhatinsights/yggdrasil/internal/http"
-	"github.com/redhatinsights/yggdrasil/internal/transport"
+	"github.com/redhatinsights/yggdrasil/internal/net"
 
 	"git.sr.ht/~spc/go-log"
 	"github.com/redhatinsights/yggdrasil"
@@ -265,17 +265,17 @@ func main() {
 			d: d,
 		}
 
-		var transporter transport.Transporter
+		var transporter net.Transporter
 		switch DefaultConfig.Protocol {
 		case "mqtt":
 			var err error
-			transporter, err = transport.NewMQTTTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, client.DataReceiveHandlerFunc)
+			transporter, err = net.NewMQTTTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, client.DataReceiveHandlerFunc)
 			if err != nil {
 				return cli.Exit(fmt.Errorf("cannot create MQTT transport: %w", err), 1)
 			}
 		case "http":
 			var err error
-			transporter, err = transport.NewHTTPTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, UserAgent, time.Second*5, client.DataReceiveHandlerFunc)
+			transporter, err = net.NewHTTPTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, UserAgent, time.Second*5, client.DataReceiveHandlerFunc)
 			if err != nil {
 				return cli.Exit(fmt.Errorf("cannot create HTTP transport: %w", err), 1)
 			}
