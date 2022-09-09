@@ -12,6 +12,7 @@ const (
 	cliProtocol      = "protocol"
 	cliDataHost      = "data-host"
 	cliExcludeWorker = "exclude-worker"
+	cliRPCProtocol   = "rpc-protocol"
 )
 
 // Config contains current configuration state for yggdrasil.

@@ -25,8 +25,8 @@ func (s *echoServer) Send(ctx context.Context, d *pb.Data) (*pb.Receipt, error) 
 		message := string(d.GetContent())
 		log.Infof("echoing %v", message)
 
-		// Dial the Dispatcher and call "Finish"
-		conn, err := grpc.Dial(yggdSocketAddr, grpc.WithInsecure())
+		// Dial the Dispatcher and call "Send"
+		conn, err := grpc.Dial("unix:"+yggSocketAddr, grpc.WithInsecure())
 		if err != nil {
 			log.Fatal(err)
 		}

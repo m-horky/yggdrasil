@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"time"
 
 	"git.sr.ht/~spc/go-log"
 
@@ -20,14 +19,16 @@ import (
 )
 
 var (
-	protocol       = flagvar.Enum{Choices: []string{"grpc", "varlink"}}
-	yggdSocketAddr = ""
-	logLevel       = flagvar.Enum{Choices: []string{"error", "warn", "info", "debug", "trace"}}
+	protocol      = flagvar.Enum{Choices: []string{"grpc", "varlink"}}
+	yggSocketAddr = ""
+	yggListenAddr = ""
+	logLevel      = flagvar.Enum{Choices: []string{"error", "warn", "info", "debug", "trace"}}
 )
 
 func main() {
 	fs := flag.NewFlagSet(filepath.Base(os.Args[0]), flag.ExitOnError)
-	fs.StringVar(&yggdSocketAddr, "yggd-socket-addr", "", "dispatcher socket address")
+	fs.StringVar(&yggSocketAddr, "socket-addr", "", "dispatcher socket address")
+	fs.StringVar(&yggListenAddr, "listen-addr", "", "worker socket address")
 	fs.Var(&logLevel, "log-level", "log verbosity level (error (default), warn, info, debug, trace)")
 	fs.Var(&protocol, "protocol", "desired RPC protocol (grpc (default), varlink)")
 	_ = fs.String("config", "", "path to `file` containing configuration values (optional)")
@@ -50,29 +51,8 @@ func main() {
 
 	switch protocol.Value {
 	case "grpc":
-		// Dial the dispatcher on its well-known address.
-		conn, err := grpc.Dial(yggdSocketAddr, grpc.WithInsecure())
-		if err != nil {
-			log.Fatal(err)
-		}
-		defer conn.Close()
-
-		// Create a dispatcher client
-		c := pb.NewDispatcherClient(conn)
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-
-		// Register as a handler of the "echo" type.
-		r, err := c.Register(ctx, &pb.RegistrationRequest{Handler: "echo", Pid: int64(os.Getpid())})
-		if err != nil {
-			log.Fatal(err)
-		}
-		if !r.GetRegistered() {
-			log.Fatalf("handler registration failed: %v", err)
-		}
-
 		// Listen on the provided socket address.
-		l, err := net.Listen("unix", r.GetAddress())
+		l, err := net.Listen("unix", yggListenAddr)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -98,9 +78,9 @@ func main() {
 			log.Fatalf("error: cannot register VARLINK interface: %v", err)
 		}
 
-		log.Infoln("listening on socket: unix:@com.redhat.yggdrasil.worker")
-		if err := service.Listen(context.Background(), "unix:@com.redhat.yggdrasil.worker", 0); err != nil {
-			log.Fatalf("error: cannot listen on socket %v: %v", "unix:@com.redhat.yggdrasil.worker", err)
+		log.Infoln("listening on socket: " + yggListenAddr)
+		if err := service.Listen(context.Background(), "unix:"+yggListenAddr, 0); err != nil {
+			log.Fatalf("error: cannot listen on socket %v: %v", yggListenAddr, err)
 		}
 	default:
 		log.Fatal("error: unsupported RPC protocol: %v", protocol.Value)

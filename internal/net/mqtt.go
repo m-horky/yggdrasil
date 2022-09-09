@@ -16,12 +16,12 @@ import (
 // messages over MQTT by subscribing and publishing to topics on an MQTT broker.
 type MQTT struct {
 	client         mqtt.Client
-	receiveHandler DataReceiveHandlerFunc
+	receiveHandler RxHandlerFunc
 }
 
 // NewMQTTTransport creates a transport suitable for transmitting data over a
 // set of MQTT topics.
-func NewMQTTTransport(clientID string, broker string, tlsConfig *tls.Config, dataRecvFunc DataReceiveHandlerFunc) (*MQTT, error) {
+func NewMQTTTransport(clientID string, broker string, tlsConfig *tls.Config) (*MQTT, error) {
 	var t MQTT
 
 	opts := mqtt.NewClientOptions()
@@ -46,8 +46,10 @@ func NewMQTTTransport(clientID string, broker string, tlsConfig *tls.Config, dat
 		topic = fmt.Sprintf("%v/%v/data/in", yggdrasil.PathPrefix, opts.ClientID())
 		c.Subscribe(topic, 1, func(c mqtt.Client, m mqtt.Message) {
 			go func() {
-				if err := t.ReceiveData(m.Payload(), "data"); err != nil {
-					log.Errorf("cannot receive data message: %v", err)
+				if t.receiveHandler != nil {
+					if err := t.receiveHandler("data", nil, m.Payload()); err != nil {
+						log.Errorf("cannot receive data message: %v", err)
+					}
 				}
 			}()
 		})
@@ -56,8 +58,10 @@ func NewMQTTTransport(clientID string, broker string, tlsConfig *tls.Config, dat
 		topic = fmt.Sprintf("%v/%v/control/in", yggdrasil.PathPrefix, opts.ClientID())
 		c.Subscribe(topic, 1, func(c mqtt.Client, m mqtt.Message) {
 			go func() {
-				if err := t.ReceiveData(m.Payload(), "control"); err != nil {
-					log.Errorf("cannot receive control message: %v", err)
+				if t.receiveHandler != nil {
+					if err := t.receiveHandler("control", nil, m.Payload()); err != nil {
+						log.Errorf("cannot receive control message: %v", err)
+					}
 				}
 			}()
 		})
@@ -93,7 +97,6 @@ func NewMQTTTransport(clientID string, broker string, tlsConfig *tls.Config, dat
 	opts.SetBinaryWill(fmt.Sprintf("%v/%v/control/out", yggdrasil.PathPrefix, opts.ClientID), data, 1, false)
 
 	t.client = mqtt.NewClient(opts)
-	t.receiveHandler = dataRecvFunc
 
 	return &t, nil
 }
@@ -113,23 +116,26 @@ func (t *MQTT) Disconnect(quiesce uint) {
 	t.client.Disconnect(quiesce)
 }
 
-// SendData publishes data to an MQTT topic created by combining client
-// information with dest.
-func (t *MQTT) SendData(data []byte, dest string) error {
+// Tx publishes data to an MQTT topic created by combining client information
+// with addr.
+func (t *MQTT) Tx(addr string, metadata map[string]string, data []byte) (responseCode int, responseMetadata map[string]string, responseData []byte, err error) {
 	opts := t.client.OptionsReader()
-	topic := fmt.Sprintf("%v/%v/%v/out", yggdrasil.PathPrefix, opts.ClientID(), dest)
+	topic := fmt.Sprintf("%v/%v/%v/out", yggdrasil.PathPrefix, opts.ClientID(), addr)
 
 	if token := t.client.Publish(topic, 1, false, data); token.Wait() && token.Error() != nil {
 		log.Errorf("failed to publish message: %v", token.Error())
-		return token.Error()
+		return -1, nil, nil, token.Error()
 	}
 	log.Debugf("published message to topic %v", topic)
 	log.Tracef("message: %v", string(data))
 
-	return nil
+	// MQTT does not support response messages, so always return 0/nil here.
+	return 0, nil, nil, nil
 }
 
-func (t *MQTT) ReceiveData(data []byte, dest string) error {
-	t.receiveHandler(data, dest)
+// SetRxHandler stores a reference to f, which is then called whenever data is
+// received over the inbound data topic.
+func (t *MQTT) SetRxHandler(f RxHandlerFunc) error {
+	t.receiveHandler = f
 	return nil
 }

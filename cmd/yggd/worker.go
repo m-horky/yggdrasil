@@ -20,11 +20,13 @@ import (
 )
 
 type workerConfig struct {
-	Exec      string   `toml:"exec"`
-	Protocol  string   `toml:"protocol"`
-	Env       []string `toml:"env"`
+	Exec      string            `toml:"exec"`
+	Protocol  string            `toml:"protocol"`
+	Env       []string          `toml:"env"`
+	Features  map[string]string `toml:"features"`
 	delay     time.Duration
 	directive string
+	addr      string
 }
 
 // loadWorkerConfig reads the contents of file and parses it into a workerConfig
@@ -48,7 +50,7 @@ func loadWorkerConfig(file string) (*workerConfig, error) {
 // starts it, and starts a goroutine that waits for the process to exit. If not
 // nil, started is invoked after the process is started. Likewise, when the
 // process is stopped, stopped is invoked.
-func startWorker(config workerConfig, started func(pid int), stopped func(pid int)) error {
+func startWorker(config *workerConfig, started func(pid int), stopped func(pid int)) error {
 	argv := strings.Split(config.Exec, " ")
 
 	program := argv[0]
@@ -57,11 +59,16 @@ func startWorker(config workerConfig, started func(pid int), stopped func(pid in
 		args = argv[1:]
 	}
 
+	config.addr = fmt.Sprintf("@ygg-%v-%v", config.directive, randomString(6))
+
 	env := []string{
 		"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
 		"YGG_CONFIG_DIR=" + filepath.Join(yggdrasil.SysconfDir, yggdrasil.LongName),
 		"YGG_LOG_LEVEL=" + log.CurrentLevel().String(),
 		"YGG_CLIENT_ID=" + DefaultConfig.ClientID,
+		"YGG_SOCKET_ADDR=" + DefaultConfig.SocketAddr,
+		"YGG_LISTEN_ADDR=" + config.addr,
+		"YGG_PROTOCOL=" + config.Protocol,
 	}
 
 	proxy := httpproxy.FromEnvironment()
@@ -73,13 +80,6 @@ func startWorker(config workerConfig, started func(pid int), stopped func(pid in
 	}
 	if proxy.NoProxy != "" {
 		env = append(env, "NO_PROXY="+proxy.NoProxy)
-	}
-
-	switch config.Protocol {
-	case "grpc":
-		env = append(env, "YGG_SOCKET_ADDR=unix:"+DefaultConfig.SocketAddr)
-	default:
-		return fmt.Errorf("unsupported protocol: %v", config.Protocol)
 	}
 
 	for _, val := range config.Env {
@@ -212,7 +212,7 @@ func stopWorkers() error {
 	return nil
 }
 
-func watchWorkerDir(dir string, died chan int) {
+func watchWorkerDir(dir string, started func(config *workerConfig), stopped func(config *workerConfig)) {
 	c := make(chan notify.EventInfo, 1)
 
 	if err := notify.Watch(dir, c, notify.InCloseWrite, notify.InDelete, notify.InMovedFrom, notify.InMovedTo); err != nil {
@@ -236,8 +236,14 @@ func watchWorkerDir(dir string, died chan int) {
 			}
 			log.Debugf("starting worker: %v", config.directive)
 			go func() {
-				if err := startWorker(*config, nil, func(pid int) {
-					died <- pid
+				if err := startWorker(config, func(_ int) {
+					if started != nil {
+						started(config)
+					}
+				}, func(_ int) {
+					if stopped != nil {
+						stopped(config)
+					}
 				}); err != nil {
 					log.Errorf("cannot start worker %v: %v", config.directive, err)
 					return

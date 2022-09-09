@@ -12,7 +12,7 @@ func (e registryError) Error() string { return string(e) }
 
 type registry struct {
 	mu sync.RWMutex
-	mp map[string]*worker
+	mp map[string]*workerConfig
 }
 
 func (r *registry) init() {
@@ -20,48 +20,48 @@ func (r *registry) init() {
 	defer r.mu.Unlock()
 
 	if r.mp == nil {
-		r.mp = make(map[string]*worker)
+		r.mp = make(map[string]*workerConfig)
 	}
 }
 
-func (r *registry) set(handler string, w *worker) error {
+func (r *registry) set(directive string, w *workerConfig) error {
 	r.init()
 
-	if r.get(handler) != nil {
+	if r.get(directive) != nil {
 		return errWorkerRegistered
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.mp[handler] = w
+	r.mp[directive] = w
 
 	return nil
 }
 
-func (r *registry) get(handler string) *worker {
+func (r *registry) get(directive string) *workerConfig {
 	r.init()
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	return r.mp[handler]
+	return r.mp[directive]
 }
 
-func (r *registry) del(handler string) {
+func (r *registry) del(directive string) {
 	r.init()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	delete(r.mp, handler)
+	delete(r.mp, directive)
 }
 
-func (r *registry) all() map[string]*worker {
+func (r *registry) all() map[string]*workerConfig {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	all := make(map[string]*worker)
+	all := make(map[string]*workerConfig)
 	for k, w := range r.mp {
 		all[k] = w
 	}

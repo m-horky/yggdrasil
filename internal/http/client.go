@@ -10,6 +10,9 @@ import (
 	"git.sr.ht/~spc/go-log"
 )
 
+type Response http.Response
+type Request http.Request
+
 // Client is a specialized HTTP client, configured with mutual TLS certificate
 // authentication.
 type Client struct {
@@ -31,7 +34,7 @@ func NewHTTPClient(config *tls.Config, ua string) *Client {
 	}
 }
 
-func (c *Client) Get(url string) (*http.Response, error) {
+func (c *Client) Get(url string) (*Response, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create HTTP request: %w", err)
@@ -41,10 +44,11 @@ func (c *Client) Get(url string) (*http.Response, error) {
 	log.Debugf("sending HTTP request: %v %v", req.Method, req.URL)
 	log.Tracef("request: %v", req)
 
-	return c.client.Do(req)
+	resp, err := c.client.Do(req)
+	return (*Response)(resp), err
 }
 
-func (c *Client) Post(url string, headers map[string]string, body []byte) (*http.Response, error) {
+func (c *Client) Post(url string, headers map[string]string, body []byte) (*Response, error) {
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create HTTP request: %w", err)
@@ -58,5 +62,6 @@ func (c *Client) Post(url string, headers map[string]string, body []byte) (*http
 	log.Debugf("sending HTTP request: %v %v", req.Method, req.URL)
 	log.Tracef("request: %v", req)
 
-	return c.client.Do(req)
+	resp, err := c.client.Do(req)
+	return (*Response)(resp), err
 }

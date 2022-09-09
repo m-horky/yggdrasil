@@ -76,7 +76,7 @@ func TestStartWorker(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			err := startWorker(test.input, nil, nil)
+			err := startWorker(&test.input, nil, nil)
 
 			if test.wantError != nil {
 				if !cmp.Equal(err, test.wantError, cmpopts.EquateErrors()) {

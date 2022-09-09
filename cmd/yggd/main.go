@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -19,11 +18,9 @@ import (
 
 	"git.sr.ht/~spc/go-log"
 	"github.com/redhatinsights/yggdrasil"
-	pb "github.com/redhatinsights/yggdrasil/protocol/grpc"
 	"github.com/rjeczalik/notify"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
-	"google.golang.org/grpc"
 )
 
 var (
@@ -244,45 +241,29 @@ func main() {
 		if err != nil {
 			return cli.Exit(fmt.Errorf("cannot create TLS config: %w", err), 1)
 		}
-		httpClient := http.NewHTTPClient(tlsConfig, UserAgent)
-
-		// Create gRPC dispatcher service
-		d := newDispatcher(httpClient)
-		s := grpc.NewServer()
-		pb.RegisterDispatcherServer(s, d)
-		l, err := net.Listen("unix", DefaultConfig.SocketAddr)
-		if err != nil {
-			return cli.Exit(fmt.Errorf("cannot listen to socket: %w", err), 1)
-		}
-		go func() {
-			log.Infof("listening on socket: %v", DefaultConfig.SocketAddr)
-			if err := s.Serve(l); err != nil {
-				log.Errorf("cannot start server: %v", err)
-			}
-		}()
-
-		client := Client{
-			d: d,
-		}
+		_ = http.NewHTTPClient(tlsConfig, UserAgent)
 
 		var transporter net.Transporter
 		switch DefaultConfig.Protocol {
 		case "mqtt":
 			var err error
-			transporter, err = net.NewMQTTTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, client.DataReceiveHandlerFunc)
+			transporter, err = net.NewMQTTTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig)
 			if err != nil {
 				return cli.Exit(fmt.Errorf("cannot create MQTT transport: %w", err), 1)
 			}
 		case "http":
 			var err error
-			transporter, err = net.NewHTTPTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, UserAgent, time.Second*5, client.DataReceiveHandlerFunc)
+			transporter, err = net.NewHTTPTransport(DefaultConfig.ClientID, DefaultConfig.Server, tlsConfig, UserAgent, time.Second*5)
 			if err != nil {
 				return cli.Exit(fmt.Errorf("cannot create HTTP transport: %w", err), 1)
 			}
 		default:
 			return cli.Exit(fmt.Errorf("unsupported transport protocol: %v", DefaultConfig.Protocol), 1)
 		}
-		client.t = transporter
+
+		// Create the main program client
+		manager := newManager()
+		client := NewClient(manager, transporter)
 		if err := client.Connect(); err != nil {
 			return cli.Exit(fmt.Errorf("cannot connect using transport: %w", err), 1)
 		}
@@ -301,7 +282,7 @@ func main() {
 		// and publishes "connection-status" messages to MQTT.
 		var prevDispatchersHash atomic.Value
 		go func() {
-			for dispatchers := range d.dispatchers {
+			for dispatchers := range manager.dispatchers {
 				data, err := json.Marshal(dispatchers)
 				if err != nil {
 					log.Errorf("cannot marshal dispatcher map to JSON: %v", err)
@@ -332,13 +313,7 @@ func main() {
 			}
 		}()
 
-		// Start a goroutine that receives yggdrasil.Data values on a 'send'
-		// channel and dispatches them to worker processes.
-		go d.sendData()
-
-		// Start a goroutine that receives yggdrasil.Data values on a 'recv'
-		// channel and publish them to MQTT.
-		go client.ReceiveData()
+		died := make(chan *workerConfig)
 
 		// Locate and start worker child processes.
 		workerPath := filepath.Join(yggdrasil.SysconfDir, yggdrasil.LongName, "workers")
@@ -362,9 +337,17 @@ func main() {
 			}
 			log.Debugf("starting worker: %v", config.directive)
 			go func() {
-				if err := startWorker(*config, nil, func(pid int) {
-					d.deadWorkers <- pid
-				}); err != nil {
+				workerStarted := func(_ int) {
+					if err := manager.registerWorker(config); err != nil {
+						log.Errorf("cannot register worker: %v", err)
+					}
+				}
+
+				workerStopped := func(_ int) {
+					died <- config
+				}
+
+				if err := startWorker(config, workerStarted, workerStopped); err != nil {
 					log.Errorf("cannot start worker: %v", err)
 					return
 				}
@@ -372,11 +355,21 @@ func main() {
 		}
 		// Start a goroutine that watches the worker directory for added or
 		// deleted files. Any "worker" files it detects are started up.
-		go watchWorkerDir(workerPath, d.deadWorkers)
+		go watchWorkerDir(workerPath, func(config *workerConfig) {
+			if err := manager.registerWorker(config); err != nil {
+				log.Errorf("cannot register worker: %v", err)
+			}
+		}, func(config *workerConfig) {
+			died <- config
+		})
 
-		// Start a goroutine that receives handler values on a channel and
+		// Start a goroutine that receives workerConfig values on a channel and
 		// removes the worker registration entry.
-		go d.unregisterWorker()
+		go func() {
+			for worker := range died {
+				manager.unregisterWorker(worker.directive)
+			}
+		}()
 
 		// Start a goroutine that watches the tags file for write events and
 		// publishes connection status messages when the file changes.

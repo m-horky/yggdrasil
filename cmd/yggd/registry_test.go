@@ -11,58 +11,58 @@ func TestSet(t *testing.T) {
 	tests := []struct {
 		description string
 		input       []struct {
-			handler string
-			worker  *worker
+			directive string
+			worker    *workerConfig
 		}
 		want      *registry
 		wantError error
 	}{
 		{
-			description: "two handler values",
+			description: "two directive values",
 			input: []struct {
-				handler string
-				worker  *worker
+				directive string
+				worker    *workerConfig
 			}{
 				{
-					handler: "test1",
-					worker: &worker{
-						handler: "test1",
+					directive: "test1",
+					worker: &workerConfig{
+						directive: "test1",
 					},
 				},
 				{
-					handler: "test2",
-					worker: &worker{
-						handler: "test2",
+					directive: "test2",
+					worker: &workerConfig{
+						directive: "test2",
 					},
 				},
 			},
 			want: &registry{
-				mp: map[string]*worker{
+				mp: map[string]*workerConfig{
 					"test1": {
-						handler: "test1",
+						directive: "test1",
 					},
 					"test2": {
-						handler: "test2",
+						directive: "test2",
 					},
 				},
 			},
 		},
 		{
-			description: "duplicate handler value",
+			description: "duplicate directive value",
 			input: []struct {
-				handler string
-				worker  *worker
+				directive string
+				worker    *workerConfig
 			}{
 				{
-					handler: "test",
-					worker: &worker{
-						handler: "test",
+					directive: "test",
+					worker: &workerConfig{
+						directive: "test",
 					},
 				},
 				{
-					handler: "test",
-					worker: &worker{
-						handler: "test",
+					directive: "test",
+					worker: &workerConfig{
+						directive: "test",
 					},
 				},
 			},
@@ -75,7 +75,7 @@ func TestSet(t *testing.T) {
 			got := &registry{}
 
 			for _, input := range test.input {
-				if err := got.set(input.handler, input.worker); err != nil {
+				if err := got.set(input.directive, input.worker); err != nil {
 					if err != nil {
 						if test.wantError != nil {
 							if !cmp.Equal(err, test.wantError) {
@@ -89,7 +89,7 @@ func TestSet(t *testing.T) {
 			}
 
 			if test.wantError == nil {
-				if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, worker{}), cmpopts.IgnoreFields(registry{}, "mu")) {
+				if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, workerConfig{}), cmpopts.IgnoreFields(registry{}, "mu")) {
 					t.Fatalf("%#v != %#v", got, test.want)
 				}
 			}
@@ -101,53 +101,53 @@ func TestGet(t *testing.T) {
 	tests := []struct {
 		description string
 		input       struct {
-			r       *registry
-			handler string
+			r         *registry
+			directive string
 		}
-		want *worker
+		want *workerConfig
 	}{
 		{
 			description: "present",
 			input: struct {
-				r       *registry
-				handler string
+				r         *registry
+				directive string
 			}{
 				r: &registry{
-					mp: map[string]*worker{
+					mp: map[string]*workerConfig{
 						"test": {
-							handler: "test",
+							directive: "test",
 						},
 					},
 				},
-				handler: "test",
+				directive: "test",
 			},
-			want: &worker{
-				handler: "test",
+			want: &workerConfig{
+				directive: "test",
 			},
 		},
 		{
 			description: "absent",
 			input: struct {
-				r       *registry
-				handler string
+				r         *registry
+				directive string
 			}{
 				r: &registry{
-					mp: map[string]*worker{
+					mp: map[string]*workerConfig{
 						"test": {
-							handler: "test",
+							directive: "test",
 						},
 					},
 				},
-				handler: "test2",
+				directive: "test2",
 			},
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.description, func(t *testing.T) {
-			got := test.input.r.get(test.input.handler)
+			got := test.input.r.get(test.input.directive)
 
-			if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, worker{}), cmpopts.IgnoreFields(registry{}, "mu")) {
+			if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, workerConfig{}), cmpopts.IgnoreFields(registry{}, "mu")) {
 				t.Errorf("%#v != %#v", got, test.want)
 			}
 		})
@@ -169,16 +169,16 @@ func TestDel(t *testing.T) {
 				h string
 			}{
 				r: &registry{
-					mp: map[string]*worker{
+					mp: map[string]*workerConfig{
 						"test": {
-							handler: "test",
+							directive: "test",
 						},
 					},
 				},
 				h: "test",
 			},
 			want: &registry{
-				mp: map[string]*worker{},
+				mp: map[string]*workerConfig{},
 			},
 		},
 	}
@@ -190,7 +190,7 @@ func TestDel(t *testing.T) {
 			}
 			got.del(test.input.h)
 
-			if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, worker{}), cmpopts.IgnoreFields(registry{}, "mu")) {
+			if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, workerConfig{}), cmpopts.IgnoreFields(registry{}, "mu")) {
 				t.Errorf("%#v != %#v", got, test.want)
 			}
 		})
@@ -201,25 +201,25 @@ func TestAll(t *testing.T) {
 	tests := []struct {
 		description string
 		input       *registry
-		want        map[string]*worker
+		want        map[string]*workerConfig
 	}{
 		{
 			input: &registry{
-				mp: map[string]*worker{
+				mp: map[string]*workerConfig{
 					"test1": {
-						handler: "test1",
+						directive: "test1",
 					},
 					"test2": {
-						handler: "test2",
+						directive: "test2",
 					},
 				},
 			},
-			want: map[string]*worker{
+			want: map[string]*workerConfig{
 				"test1": {
-					handler: "test1",
+					directive: "test1",
 				},
 				"test2": {
-					handler: "test2",
+					directive: "test2",
 				},
 			},
 		},
@@ -229,7 +229,7 @@ func TestAll(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			got := test.input.all()
 
-			if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, worker{}), cmpopts.IgnoreFields(registry{}, "mu")) {
+			if !cmp.Equal(got, test.want, cmp.AllowUnexported(registry{}, workerConfig{}), cmpopts.IgnoreFields(registry{}, "mu")) {
 				t.Errorf("%#v != %#v", got, test.want)
 			}
 		})
